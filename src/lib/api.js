@@ -7,7 +7,7 @@ let getClientId = () => {
 	return window.localStorage.getItem('clientId')
 }
 
-let request = (url, data) => {
+let request = (url, data = {}) => {
 	return new Promise((resolve, reject) => {
 		let clientId = getClientId()
 		let xhr = new XMLHttpRequest()
@@ -58,8 +58,14 @@ let API = {
 		}
 	},
 	category: {
+		list () {
+			return request('/category/list')
+		},
 		create (parent, name) {
 			return request('/category/create', { parent, name })
+		},
+		rename (id, name) {
+			return request('/category/rename', { id, name })
 		}
 	},
 }

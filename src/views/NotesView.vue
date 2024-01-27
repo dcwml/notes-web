@@ -8,24 +8,28 @@
 					<div class="create-category">
 						<div class="title">新建分类</div>
 						<div class="form-item">
-							选择父分类:
+							选择分类:
 							<select name="" id="" v-model="createCategoryForm.parent">
 								<option value="0">（无）</option>
-								<option v-for="item of categoryOptions" v-bind:key="item.value" :value="item.value">{{ item.label }}</option>
+								<option v-for="item of categoryOptions" v-bind:key="item.value" :value="item.value" v-html="item.label"></option>
 							</select>
 						</div>
 						<div class="form-item">
-							输入分类名:
+							新建子分类或者修改名称：
 							<input type="text" placeholder="请输入分类名" v-model="createCategoryForm.name">
 						</div>
 						<div>
 							<button @click="createCategory">新建分类</button>
+							<button @click="renameCategory">重命名</button>
 						</div>
 					</div>
-					<div>
+					<div class="create-note">
 						<button @click="createNote" class="button-primary">新建笔记</button>
 					</div>
-					<div>
+					<div class="breadcrumb">
+						<div class="breadcrumb-item"></div>
+					</div>
+					<div class="list">
 						<div class="item" v-for="item of list" v-bind:key="item.mid" @click="onItemClicked(item)">
 							<IconFolderOutline v-if="item.type === 'category'"></IconFolderOutline>
 							<IconDocumentOutline v-if="item.type === 'note'"></IconDocumentOutline>
@@ -67,10 +71,10 @@
 				loading: false,
 				category: 0,
 				allData: { 0: { categoryList: [], noteList: [] } },
-				// categoryList: [],
+				categoryList: [],
 				// noteList: [],
 				createCategoryForm: {
-					parent: 2,
+					parent: 0,
 					name: '',
 				},
 				note: {
@@ -114,23 +118,22 @@
 			categoryOptions () {
 				let arr = []
 
-				let getChildren = parent => {
-					if (this.allData[parent]) {
-						if(this.allData[parent].categories) {
-							for (let item of this.allData[parent].categories) {
-								arr.push({ value: item.id, label: item.name })
-								getChildren(item.id)
-							}
-						}
+				let getChildren = (parent_id, level) => {
+					let list = this.categoryList.filter(item => item.parent_id === parent_id)
+					for (let i = 0; i < list.length; i++) {
+						const item = list[i]
+						arr.push({ value: item.id, label: this.getPrefix(level) + item.name })
+						// getChildren(item.id, level + 1)
 					}
 				}
-				// getChildren(0)
+				getChildren(0, 1)
 
 				return arr
 			}
 		},
 		async mounted () {
 			this.getCachedList()
+			await this.getCategoryList()
 			this.ready = true
 			await this.getList()
 		},
@@ -144,6 +147,15 @@
 				// 	this.categoryList = []
 				// 	this.noteList = []
 				// }
+			},
+			async getCategoryList () {
+				try {
+					let ret = await API.category.list()
+					console.log(ret)
+					this.categoryList = ret.list
+				} catch (err) {
+					alert(err.message)
+				}
 			},
 			async getList (parent = 0) {
 				let dat = await API.note.list({ parent })
@@ -172,9 +184,35 @@
 				}
 				try {
 					await API.category.create(parent, name)
-					this.getList(parent)
+					await this.getCategoryList()
+					await this.getList()
 				} catch (err) {
 					alert(err.message)
+				}
+			},
+
+			async renameCategory () {
+				let id = this.createCategoryForm.parent
+				let name = this.createCategoryForm.name
+				if (!id) {
+					alert('请选择要重命名的分类')
+					return
+				}
+				let nameVerifyResult = await verify(name, [
+					{ required: true, message: '请输入分类名1' },
+					{ minLen: 1, message: '分类名不能少于1个字符' },
+					{ maxLen: 16, message: '分类名不能超过16个字符' },
+				])
+				if (nameVerifyResult) {
+					alert(nameVerifyResult.message)
+					return
+				}
+				try {
+					await API.category.rename(id, name)
+					await this.getCategoryList()
+					await this.getList()
+				} catch (ex) {
+					alert(ex.message)
 				}
 			},
 
@@ -234,6 +272,9 @@
 				let dat = this.getCachedData()
 				dat[parent] = data
 				window.localStorage.setItem('note_data', JSON.stringify(dat))
+			},
+			getPrefix (level) {
+				return '&nbsp;&nbsp;'.repeat(level - 1)
 			}
 		},
 	}
@@ -284,9 +325,22 @@
 				padding: 10px 0;
 			}
 
+			input {
+				width: 100%;
+				box-sizing: border-box;
+			}
+		}
+
+		.create-note {
+			padding: 10px;
+
 			button {
 				width: 100%;
 			}
+		}
+
+		.list {
+			padding: 10px;
 		}
 
 		.item {
