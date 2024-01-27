@@ -47,3 +47,91 @@ input[type=text]
   line-height: 18px;
   outline: none;
 }
+
+/* ================================ Markdown START ================================ */
+
+.md-preview h1 {
+  padding: 10px 0;
+  font-size: 24px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #999;
+  font-weight: bold;
+}
+.md-preview h2 {
+  padding: 10px 0;
+  font-size: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #ccc;
+  font-weight: bold;
+}
+.md-preview h3 {
+  padding: 8px 0;
+  font-size: 16px;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+.md-preview h4 {
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.md-preview pre {
+  overflow-x: scroll;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 20px;
+  color: #333;
+}
+.md-preview code {
+  font-family: 'Courier New', Courier, monospace;
+}
+.md-preview blockquote {
+  padding-left: 10px;
+  border-left: 4px solid #ccc;
+  margin-left: 0;
+  margin-bottom: 10px;
+}
+.md-preview table {
+  border: 1px solid #ccc;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+.md-preview td, th {
+  padding: 5px;
+  border: 1px solid #ccc;
+}
+
+.md-preview {
+  ul {
+    padding-left: 20px;
+    li {
+      padding: 8px 0;
+      list-style: disc;
+
+      ul {
+        li {
+          list-style: circle;
+
+          ul {
+            li {
+              list-style: square;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/* ================================ Markdown END ================================ */

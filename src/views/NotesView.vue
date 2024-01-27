@@ -1,7 +1,6 @@
 <template>
 	<div class="p-notes" :class="{ ready: ready }">
 		<div class="hd">
-
 		</div>
 		<div class="bd">
 			<div class="wrap">
@@ -27,15 +26,24 @@
 						<button @click="createNote" class="button-primary">新建笔记</button>
 					</div>
 					<div>
-						<div class="item" v-for="item of list" v-bind:key="item.mid">
-							<IconFolderOutline></IconFolderOutline>
+						<div class="item" v-for="item of list" v-bind:key="item.mid" @click="onItemClicked(item)">
+							<IconFolderOutline v-if="item.type === 'category'"></IconFolderOutline>
+							<IconDocumentOutline v-if="item.type === 'note'"></IconDocumentOutline>
 							{{ item.name }}
 						</div>
 					</div>
 				</div>
-				<div class="middle">middle</div>
+				<div class="middle">
+						<div class="form-item">
+							<input type="text" class="title" v-model="note.title" @input="update">
+						</div>
+						<div class="tip" v-text="tip"></div>
+						<div class="form-item editor">
+							<textarea v-model="note.content" @input="update"></textarea>
+						</div>
+				</div>
 				<div class="right">
-					right
+					<div class="content md-preview" v-html="html"></div>
 				</div>
 			</div>
 		</div>
@@ -44,12 +52,14 @@
 </template>
 
 <script>
+	import '../assets/marked.min.js'
 	import API from '../lib/api.js'
 	import { verify } from '../lib/verify.js'
 	import IconFolderOutline from '../components/icons/IconFolderOutline.vue'
+	import IconDocumentOutline from '../components/icons/IconDocumentOutline.vue'
 
 	export default {
-		components: { IconFolderOutline },
+		components: { IconFolderOutline, IconDocumentOutline },
 		setup () {},
 		data () {
 			return {
@@ -62,7 +72,15 @@
 				createCategoryForm: {
 					parent: 2,
 					name: '',
-				}
+				},
+				note: {
+					id: 0,
+					title: '',
+					content: '',
+				},
+				html: '',
+				timeoutId: 0,
+				tip: '请从左边选择一个笔记进行编辑',
 			}
 		},
 		computed: {
@@ -74,6 +92,7 @@
 				if (this.allData[this.category].categories) {
 					for (let item of this.allData[this.category].categories) {
 						arr.push({
+							id: item.id,
 							type: 'category',
 							mid: 'c_' + item.id,
 							name: item.name
@@ -83,6 +102,7 @@
 				if (this.allData[this.category].notes) {
 					for (let item of this.allData[this.category].notes) {
 						arr.push({
+							id: item.id,
 							type: 'note',
 							mid: 'n_' + item.id,
 							name: item.title
@@ -104,7 +124,7 @@
 						}
 					}
 				}
-				getChildren(0)
+				// getChildren(0)
 
 				return arr
 			}
@@ -129,6 +149,7 @@
 				let dat = await API.note.list({ parent })
 				let data = this.allData
 				data[parent] = dat
+				console.log(data)
 				this.allData = data
 				// this.$watch(this.allData, parent, dat)
 				// this.categoryList = dat.categoryList
@@ -159,7 +180,47 @@
 
 			async createNote () {
 				let categoryId = this.category
-				let ret = await API.note.create(categoryId)
+				let note = await API.note.create(categoryId)
+				this.note = note
+				this.update()
+				document.querySelector('textarea').focus()
+				await this.getList(categoryId)
+			},
+
+			async onItemClicked (item) {
+				if (item.type === 'category') {
+					this.category = item.id
+					await this.getList(item.id)
+				} else {
+					let noteId = item.id
+					let note = this.allData[this.category].notes.find(note => note.id === noteId)
+					this.note = note
+					this.update(false)
+					this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
+				}
+			},
+
+			update (autoSave = true) {
+				let that = this
+				this.html = window.marked.parse(this.note.content)
+				if (!autoSave) {
+					return
+				}
+				if (this.timeoutId) {
+					clearTimeout(this.timeoutId)
+					this.timeoutId = 0
+				}
+				if (this.note.id) {
+					this.timeoutId = setTimeout(() => {
+						that.tip = '自动保存中。。。'
+						API.note.update(this.note.id, this.note.title, this.note.content).then((ret) => {
+							that.tip = '自动保存成功(' + ret.update_time + ')'
+						}).catch(err => {
+							that.tip = '自动保存失败(' + err.message + ')'
+						})
+					}, 1000)
+					this.tip = '即将自动保存'
+				}
 			},
 
 			// ================================ private functions ================================
@@ -196,10 +257,16 @@
 
 		.middle {
 			flex: 2;
+			box-sizing: border-box;
+			padding: 20px;
+			display: flex;
+			flex-direction: column;
 		}
 
 		.right {
 			flex: 3;
+			box-sizing: border-box;
+			padding: 20px;
 		}
 
 		.create-category {
@@ -223,9 +290,39 @@
 		}
 
 		.item {
+			cursor: pointer;
+
+			&:hover {
+				background-color: #f8f8f8;
+				color: var(--color-primary);
+			}
+
 			svg {
 				width: 24px;
 			}
+		}
+
+		.editor {
+			flex: 1;
+		}
+
+		input.title {
+			width: 100%;
+			box-sizing: border-box;
+		}
+
+		textarea {
+			box-sizing: border-box;
+			width: 100%;
+			height: 100%;
+		}
+
+		.tip {
+			height: 12px;
+			box-sizing: content-box;
+			padding: 0 0 8px 0;
+			color: #999;
+			font-size: 12px;
 		}
 	}
 </style>

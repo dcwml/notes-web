@@ -53,6 +53,9 @@ let API = {
 		create (categoryId) {
 			return request('/note/save', { category_id: categoryId, id: 0, title: '新笔记', content: '' })
 		},
+		update (id, title, content) {
+			return request('/note/save', { id, title, content })
+		}
 	},
 	category: {
 		create (parent, name) {
