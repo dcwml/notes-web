@@ -30,20 +30,51 @@
 						<div class="breadcrumb-item"></div>
 					</div>
 					<div class="list">
-						<div class="item" v-for="item of list" v-bind:key="item.mid" @click="onItemClicked(item)">
-							<IconFolderOutline v-if="item.type === 'category'"></IconFolderOutline>
-							<IconDocumentOutline v-if="item.type === 'note'"></IconDocumentOutline>
-							{{ item.name }}
-						</div>
+						<template v-for="item of list" v-bind:key="item.id">
+							<div :class="itemClass(item)" @click="onItemClicked($event, item)">
+								<!-- <i class="fa-solid fa-caret-right"></i> -->
+								<font-awesome-icon :icon="faCaretRight" v-if="item.len > 0 && !item.expand" />
+								<font-awesome-icon :icon="faCaretDown" v-if="item.len > 0 && item.expand" />
+								<span style="display: inline-block; width: 24px;" v-if="!item.len">&nbsp;</span>
+								<font-awesome-icon :icon="faFolderClosed" v-if="item.type === 'category' && !item.expand" />
+								<font-awesome-icon :icon="faFolderOpen" v-if="item.type === 'category' && item.expand" />
+								<font-awesome-icon :icon="faFile" v-if="item.type === 'note'" />
+								<div class="label">{{ item.label }}<span v-if="item.type === 'category'">({{ item.cLen }}, {{ item.nLen }})</span></div>
+							</div>
+							<div class="list-2" v-if="item.children && item.children.length && item.expand">
+								<template v-for="child of item.children" v-bind:key="child.id">
+									<div :class="itemClass(child)" @click="onItemClicked($event, child)">
+										<font-awesome-icon :icon="faCaretRight" v-if="child.len > 0 && !child.expand" />
+										<font-awesome-icon :icon="faCaretDown" v-if="child.len > 0 && child.expand" />
+										<span style="display: inline-block; width: 24px;" v-if="!child.len">&nbsp;</span>
+										<font-awesome-icon :icon="faFolderClosed" v-if="child.type === 'category' && !child.expand" />
+										<font-awesome-icon :icon="faFolderOpen" v-if="child.type === 'category' && child.expand" />
+										<font-awesome-icon :icon="faFile" v-if="child.type === 'note'" />
+										<div class="label">{{ child.label }}<span v-if="child.type === 'category'">({{ child.cLen }}, {{ child.nLen }})</span></div>
+									</div>
+									<div class="list-3" v-if="child.children && child.children.length && child.expand">
+										<div :class="itemClass(child2)" v-for="child2 of child.children" v-bind:key="child2.id" @click="onItemClicked($event, child2)">
+											<font-awesome-icon :icon="faCaretRight" v-if="child2.len > 0 && !child2.expand" />
+											<font-awesome-icon :icon="faCaretDown" v-if="child2.len > 0 && child2.expand" />
+											<span style="display: inline-block; width: 24px;" v-if="!child2.len">&nbsp;</span>
+											<font-awesome-icon :icon="faFolderClosed" v-if="child2.type === 'category' && !child2.expand" />
+											<font-awesome-icon :icon="faFolderOpen" v-if="child2.type === 'category' && child2.expand" />
+											<font-awesome-icon :icon="faFile" v-if="child2.type === 'note'" />
+											<div class="label">{{ child2.label }}<span v-if="child2.type === 'category'">({{ child2.cLen }}, {{ child2.nLen }})</span></div>
+										</div>
+									</div>
+								</template>
+							</div>
+						</template>
 					</div>
 				</div>
 				<div class="middle">
 						<div class="form-item">
-							<input type="text" class="title" v-model="note.title" @input="update">
+							<input type="text" class="title" v-model="note.title" @input="update" :disabled="loading">
 						</div>
 						<div class="tip" v-text="tip"></div>
 						<div class="form-item editor">
-							<textarea v-model="note.content" @input="update"></textarea>
+							<textarea v-model="note.content" @input="update" :disabled="loading"></textarea>
 						</div>
 				</div>
 				<div class="right">
@@ -52,25 +83,28 @@
 			</div>
 		</div>
 		<div class="ft"></div>
+
+		<div class="loading" v-show="loading"></div>
 	</div>
 </template>
 
 <script>
 	import '../assets/marked.min.js'
 	import API from '../lib/api.js'
+	import { faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile } from "@fortawesome/free-solid-svg-icons";
 	import { verify } from '../lib/verify.js'
-	import IconFolderOutline from '../components/icons/IconFolderOutline.vue'
-	import IconDocumentOutline from '../components/icons/IconDocumentOutline.vue'
 
 	export default {
-		components: { IconFolderOutline, IconDocumentOutline },
+		components: { },
 		setup () {},
 		data () {
 			return {
 				ready: false,
 				loading: false,
+				faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile,
 				category: 0,
-				allData: { 0: { categoryList: [], noteList: [] } },
+				allData: [],
+				list: [],
 				categoryList: [],
 				// noteList: [],
 				createCategoryForm: {
@@ -82,39 +116,14 @@
 					title: '',
 					content: '',
 				},
+				lastTitle: '',
 				html: '',
 				timeoutId: 0,
 				tip: '请从左边选择一个笔记进行编辑',
 			}
 		},
 		computed: {
-			list () {
-				if (!this.allData[this.category]) {
-					return []
-				}
-				let arr = []
-				if (this.allData[this.category].categories) {
-					for (let item of this.allData[this.category].categories) {
-						arr.push({
-							id: item.id,
-							type: 'category',
-							mid: 'c_' + item.id,
-							name: item.name
-						})
-					}
-				}
-				if (this.allData[this.category].notes) {
-					for (let item of this.allData[this.category].notes) {
-						arr.push({
-							id: item.id,
-							type: 'note',
-							mid: 'n_' + item.id,
-							name: item.title
-						})
-					}
-				}
-				return arr
-			},
+
 			categoryOptions () {
 				let arr = []
 
@@ -151,7 +160,7 @@
 			async getCategoryList () {
 				try {
 					let ret = await API.category.list()
-					console.log(ret)
+					// console.log(ret)
 					this.categoryList = ret.list
 				} catch (err) {
 					alert(err.message)
@@ -159,13 +168,29 @@
 			},
 			async getList (parent = 0) {
 				let dat = await API.note.list({ parent })
-				let data = this.allData
-				data[parent] = dat
-				console.log(data)
-				this.allData = data
+				this.allData = dat
+				this.list = this.transformList()
 				// this.$watch(this.allData, parent, dat)
 				// this.categoryList = dat.categoryList
 				// this.noteList = dat.noteList
+			},
+
+			async getNote (id) {
+				return await API.note.get(id)
+			},
+
+			itemClass (item) {
+				let cls = 'item'
+				if (item.type === 'category' && item.modelId === this.category) {
+					cls += ' selected'
+				} else if (item.type === 'note' && item.modelId === this.note.id) {
+					cls += ' selected'
+				}
+
+				if (item.type === 'category' && item.expand) {
+					cls += ' open'
+				}
+				return cls
 			},
 
 			// ================================ event handlers ================================
@@ -225,16 +250,38 @@
 				await this.getList(categoryId)
 			},
 
-			async onItemClicked (item) {
+			async onItemClicked (event, item) {
+				event.stopPropagation()
 				if (item.type === 'category') {
-					this.category = item.id
-					await this.getList(item.id)
+					this.category = item.modelId
+					item.expand = !item.expand
+					if (!item.expand) {
+						let model = this.allData.find(model => model.id === item.modelId)
+						if (model) {
+							let parent = this.allData.find(parentModel => parentModel.id === model.parent_id)
+							if (parent) {
+								this.category = parent.id
+							} else {
+								this.category = 0
+							}
+						} else {
+							this.category = 0
+						}
+					}
 				} else {
-					let noteId = item.id
-					let note = this.allData[this.category].notes.find(note => note.id === noteId)
-					this.note = note
-					this.update(false)
-					this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
+					let noteId = item.modelId
+					this.loading = true
+					try {
+						let note = await this.getNote(noteId)
+						this.note = note
+						this.update(false)
+						document.querySelector('textarea').focus()
+						this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
+						this.lastTitle = note.title
+					} catch (err) {
+						alert(err.message)
+					}
+					this.loading = false
 				}
 			},
 
@@ -253,6 +300,8 @@
 						that.tip = '自动保存中。。。'
 						API.note.update(this.note.id, this.note.title, this.note.content).then((ret) => {
 							that.tip = '自动保存成功(' + ret.update_time + ')'
+							if (that.lastTitle !== that.note.title) that.getList()
+							that.lastTitle = that.note.title
 						}).catch(err => {
 							that.tip = '自动保存失败(' + err.message + ')'
 						})
@@ -275,17 +324,71 @@
 			},
 			getPrefix (level) {
 				return '&nbsp;&nbsp;'.repeat(level - 1)
-			}
+			},
+			transformList () {
+				let getChildren = (parent_id) => {
+					let arr = []
+					let expandId = 0
+					if (this.category) {
+						let expandCategory = this.allData.find(item => item.id === this.category)
+						if (expandCategory) {
+							expandId = expandCategory.parent_id
+						}
+					}
+					let a = this.allData.filter(item => item.name && item.parent_id === parent_id)
+					let b = this.allData.filter(item => item.title && item.category_id === parent_id)
+					for (let i = 0; i < a.length; i++) {
+						let cLen = this.allData.filter(item => item.name && item.parent_id === a[i].id).length
+						let nLen = this.allData.filter(item => item.title && item.category_id === a[i].id).length
+						arr.push({
+							id: 'c_' + a[i].id,
+							modelId: a[i].id,
+							label: a[i].name, // + ' (' + cLen + ', ' + nLen + ')',
+							type: 'category',
+							cLen,
+							nLen,
+							len: cLen + nLen,
+							children: getChildren(a[i].id),
+							expand: a[i].id === this.category || a[i].id === expandId,
+						})
+					}
+					for (let i = 0; i < b.length; i++) {
+						arr.push({
+							id: 'n_' + b[i].id,
+							modelId: b[i].id,
+							label: b[i].title,
+							type: 'note',
+							cLen: 0,
+							nLen: 0,
+							len: 0,
+							children: [],
+							expand: false,
+						})
+					}
+					return arr
+				}
+
+				return getChildren(0)
+			},
 		},
 	}
 </script>
 
-<style lang="less">
+<style lang="less" scoped>
 	.p-notes {
 		display: none;
 
 		&.ready {
 			display: block;
+		}
+
+		.loading {
+			position: fixed;
+			left: 0;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			background-color: rgba(255, 255, 255, 0.5);
 		}
 
 		.wrap {
@@ -343,16 +446,37 @@
 			padding: 10px;
 		}
 
+		.list-2 {
+			padding-left: 20px;
+		}
+		.list-3 {
+			padding-left: 20px;
+		}
+
 		.item {
 			cursor: pointer;
+			padding-top: 5px;
+			padding-bottom: 5px;
 
 			&:hover {
 				background-color: #f8f8f8;
 				color: var(--color-primary);
 			}
 
+			&.selected > .label {
+				color: var(--color-primary);
+			}
+
+			&.selected > svg {
+				color: var(--color-primary);
+			}
+
 			svg {
 				width: 24px;
+			}
+
+			.label {
+				display: inline-block;
 			}
 		}
 

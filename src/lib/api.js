@@ -55,7 +55,10 @@ let API = {
 		},
 		update (id, title, content) {
 			return request('/note/save', { id, title, content })
-		}
+		},
+		get (id) {
+			return request('/note/get', { id })
+		},
 	},
 	category: {
 		list () {
