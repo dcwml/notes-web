@@ -27,7 +27,9 @@
 						<button @click="createNote" class="button-primary">新建笔记</button>
 					</div>
 					<div class="breadcrumb">
-						<div class="breadcrumb-item"></div>
+						<span class="breadcrumb-item" v-text="breadcrumb.parent"></span>
+						/
+						<span class="breadcrumb-item" v-text="breadcrumb.current"></span>
 					</div>
 					<div class="list">
 						<template v-for="item of list" v-bind:key="item.id">
@@ -67,6 +69,9 @@
 							</div>
 						</template>
 					</div>
+					<div>
+						提示：蓝色是选中，黄色是文件夹，粉色是文件。
+					</div>
 				</div>
 				<div class="middle">
 						<div class="form-item">
@@ -103,6 +108,10 @@
 				loading: false,
 				faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile,
 				category: 0,
+				breadcrumb: {
+					current: '',
+					parent: '',
+				},
 				allData: [],
 				list: [],
 				categoryList: [],
@@ -141,10 +150,14 @@
 			}
 		},
 		async mounted () {
-			this.getCachedList()
-			await this.getCategoryList()
-			this.ready = true
-			await this.getList()
+			try {
+				this.getCachedList()
+				await this.getCategoryList()
+				this.ready = true
+				await this.getList()
+			} catch (ex) {
+				alert(ex.message)
+			}
 		},
 		methods: {
 			getCachedList (parent = 0) {
@@ -278,11 +291,13 @@
 						document.querySelector('textarea').focus()
 						this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
 						this.lastTitle = note.title
+						this.category = this.note.category_id
 					} catch (err) {
 						alert(err.message)
 					}
 					this.loading = false
 				}
+				this.updateBreadcrumb()
 			},
 
 			update (autoSave = true) {
@@ -370,6 +385,21 @@
 
 				return getChildren(0)
 			},
+			updateBreadcrumb () {
+				this.breadcrumb.current = ''
+				this.breadcrumb.parent = ''
+				if (this.category) {
+					let current = this.allData.find(item => item.name && item.id === this.category)
+					if (current) {
+						this.breadcrumb.current = current.name
+
+						let parent = this.allData.find(item => item.name && item.id === current.parent_id)
+						if (parent) {
+							this.breadcrumb.parent = parent.name
+						}
+					}
+				}
+			},
 		},
 	}
 </script>
@@ -442,6 +472,10 @@
 			}
 		}
 
+		.breadcrumb {
+			text-align: center;
+		}
+
 		.list {
 			padding: 10px;
 		}
@@ -501,6 +535,13 @@
 			padding: 0 0 8px 0;
 			color: #999;
 			font-size: 12px;
+		}
+
+		.fa-folder-open, .fa-folder-closed {
+			color: #cc9;
+		}
+		.fa-file {
+			color: #c9c;
 		}
 	}
 </style>
