@@ -95,7 +95,9 @@
 
 <script>
 	import '../assets/marked.min.js'
+	import '../assets/prism.css'
 	import API from '../lib/api.js'
+	import Prism from "prismjs"
 	import { faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile } from "@fortawesome/free-solid-svg-icons";
 	import { verify } from '../lib/verify.js'
 
@@ -212,7 +214,7 @@
 				let parent = this.createCategoryForm.parent
 				let name = this.createCategoryForm.name
 				let nameVerifyResult = await verify(name, [
-					{ required: true, message: '请输入分类名1' },
+					{ required: true, message: '请输入分类名' },
 					{ minLen: 1, message: '分类名不能少于1个字符' },
 					{ maxLen: 16, message: '分类名不能超过16个字符' },
 				])
@@ -303,6 +305,9 @@
 			update (autoSave = true) {
 				let that = this
 				this.html = window.marked.parse(this.note.content)
+				setTimeout(() => {
+					Prism.highlightAll()
+				}, 300);
 				if (!autoSave) {
 					return
 				}
