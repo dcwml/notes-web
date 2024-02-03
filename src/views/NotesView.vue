@@ -31,47 +31,7 @@
 						/
 						<span class="breadcrumb-item" v-text="breadcrumb.current"></span>
 					</div>
-					<div class="list">
-						<template v-for="item of list" v-bind:key="item.id">
-							<div :class="itemClass(item)" @click="onItemClicked($event, item)">
-								<!-- <i class="fa-solid fa-caret-right"></i> -->
-								<font-awesome-icon :icon="faCaretRight" v-if="item.len > 0 && !item.expand" />
-								<font-awesome-icon :icon="faCaretDown" v-if="item.len > 0 && item.expand" />
-								<span style="display: inline-block; width: 24px;" v-if="!item.len">&nbsp;</span>
-								<font-awesome-icon :icon="faFolderClosed" v-if="item.type === 'category' && !item.expand" />
-								<font-awesome-icon :icon="faFolderOpen" v-if="item.type === 'category' && item.expand" />
-								<font-awesome-icon :icon="faFile" v-if="item.type === 'note'" />
-								<div class="label">{{ item.label }}<span v-if="item.type === 'category'">({{ item.cLen }}, {{ item.nLen }})</span></div>
-							</div>
-							<div class="list-2" v-if="item.children && item.children.length && item.expand">
-								<template v-for="child of item.children" v-bind:key="child.id">
-									<div :class="itemClass(child)" @click="onItemClicked($event, child)">
-										<font-awesome-icon :icon="faCaretRight" v-if="child.len > 0 && !child.expand" />
-										<font-awesome-icon :icon="faCaretDown" v-if="child.len > 0 && child.expand" />
-										<span style="display: inline-block; width: 24px;" v-if="!child.len">&nbsp;</span>
-										<font-awesome-icon :icon="faFolderClosed" v-if="child.type === 'category' && !child.expand" />
-										<font-awesome-icon :icon="faFolderOpen" v-if="child.type === 'category' && child.expand" />
-										<font-awesome-icon :icon="faFile" v-if="child.type === 'note'" />
-										<div class="label">{{ child.label }}<span v-if="child.type === 'category'">({{ child.cLen }}, {{ child.nLen }})</span></div>
-									</div>
-									<div class="list-3" v-if="child.children && child.children.length && child.expand">
-										<div :class="itemClass(child2)" v-for="child2 of child.children" v-bind:key="child2.id" @click="onItemClicked($event, child2)">
-											<font-awesome-icon :icon="faCaretRight" v-if="child2.len > 0 && !child2.expand" />
-											<font-awesome-icon :icon="faCaretDown" v-if="child2.len > 0 && child2.expand" />
-											<span style="display: inline-block; width: 24px;" v-if="!child2.len">&nbsp;</span>
-											<font-awesome-icon :icon="faFolderClosed" v-if="child2.type === 'category' && !child2.expand" />
-											<font-awesome-icon :icon="faFolderOpen" v-if="child2.type === 'category' && child2.expand" />
-											<font-awesome-icon :icon="faFile" v-if="child2.type === 'note'" />
-											<div class="label">{{ child2.label }}<span v-if="child2.type === 'category'">({{ child2.cLen }}, {{ child2.nLen }})</span></div>
-										</div>
-									</div>
-								</template>
-							</div>
-						</template>
-					</div>
-					<div>
-						提示：蓝色是选中，黄色是文件夹，粉色是文件。
-					</div>
+					<CategoryTree :treeData="list" @note-selected="onNoteSelected" @category-selected="onCategorySelected"></CategoryTree>
 				</div>
 				<div class="middle">
 						<div class="form-item">
@@ -100,9 +60,10 @@
 	import Prism from "prismjs"
 	import { faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile } from "@fortawesome/free-solid-svg-icons";
 	import { verify } from '../lib/verify.js'
+	import CategoryTree from '../components/CategoryTree.vue'
 
 	export default {
-		components: { },
+		components: { CategoryTree },
 		setup () {},
 		data () {
 			return {
@@ -265,41 +226,85 @@
 				await this.getList(categoryId)
 			},
 
-			async onItemClicked (event, item) {
-				event.stopPropagation()
-				if (item.type === 'category') {
-					this.category = item.modelId
-					item.expand = !item.expand
-					if (!item.expand) {
-						let model = this.allData.find(model => model.id === item.modelId)
-						if (model) {
-							let parent = this.allData.find(parentModel => parentModel.id === model.parent_id)
-							if (parent) {
-								this.category = parent.id
-							} else {
-								this.category = 0
-							}
-						} else {
-							this.category = 0
+			onCategorySelected (item) {
+				this.category = item.modelId
+				let set = arr => {
+					arr.forEach(e => {
+						if (e.type === 'category') {
+							e.selected = e.modelId === item.modelId
 						}
-					}
-				} else {
-					let noteId = item.modelId
-					this.loading = true
-					try {
-						let note = await this.getNote(noteId)
-						this.note = note
-						this.update(false)
-						document.querySelector('textarea').focus()
-						this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
-						this.lastTitle = note.title
-						this.category = this.note.category_id
-					} catch (err) {
-						alert(err.message)
-					}
-					this.loading = false
+						if (e.children) {
+							set(e.children)
+						}
+					})
 				}
-				this.updateBreadcrumb()
+				set(this.list)
+				// this.updateBreadcrumb()
+			},
+			async onNoteSelected (item) {
+				let noteId = item.modelId
+				this.loading = true
+				try {
+					let note = await this.getNote(noteId)
+					this.note = note
+					this.update(false)
+					document.querySelector('textarea').focus()
+					this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
+					this.lastTitle = note.title
+					this.category = this.note.category_id
+
+					let set = arr => {
+						arr.forEach(e => {
+							if (e.type === 'note') {
+								e.selected = e.modelId === item.modelId
+							}
+							if (e.children) {
+								set(e.children)
+							}
+						})
+					}
+					set(this.list)
+				} catch (err) {
+					alert(err.message)
+				}
+				this.loading = false
+			},
+
+			async onItemClicked () {
+				// event.stopPropagation()
+				// if (item.type === 'category') {
+				// 	this.category = item.modelId
+				// 	item.expand = !item.expand
+				// 	if (!item.expand) {
+				// 		let model = this.allData.find(model => model.id === item.modelId)
+				// 		if (model) {
+				// 			let parent = this.allData.find(parentModel => parentModel.id === model.parent_id)
+				// 			if (parent) {
+				// 				this.category = parent.id
+				// 			} else {
+				// 				this.category = 0
+				// 			}
+				// 		} else {
+				// 			this.category = 0
+				// 		}
+				// 	}
+				// } else {
+				// 	let noteId = item.modelId
+				// 	this.loading = true
+				// 	try {
+				// 		let note = await this.getNote(noteId)
+				// 		this.note = note
+				// 		this.update(false)
+				// 		document.querySelector('textarea').focus()
+				// 		this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
+				// 		this.lastTitle = note.title
+				// 		this.category = this.note.category_id
+				// 	} catch (err) {
+				// 		alert(err.message)
+				// 	}
+				// 	this.loading = false
+				// }
+				// this.updateBreadcrumb()
 			},
 
 			update (autoSave = true) {
@@ -370,6 +375,7 @@
 							len: cLen + nLen,
 							children: getChildren(a[i].id),
 							expand: a[i].id === this.category || a[i].id === expandId,
+							selected: a[i].id === this.category,
 						})
 					}
 					for (let i = 0; i < b.length; i++) {
@@ -383,6 +389,7 @@
 							len: 0,
 							children: [],
 							expand: false,
+							// selected: a[i].id === this.note.id,
 						})
 					}
 					return arr
