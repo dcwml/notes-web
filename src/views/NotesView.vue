@@ -153,7 +153,7 @@
 		},
 		async mounted () {
 			try {
-				this.getCachedList()
+				// this.getCachedList()
 				await this.getCategoryList()
 				this.ready = true
 				await this.getList()
@@ -162,16 +162,16 @@
 			}
 		},
 		methods: {
-			getCachedList (parent = 0) {
-				// let data = this.getCachedData()
-				// if (data[parent]) {
-				// 	this.categoryList = data[parent].categoryList
-				// 	this.noteList = data[parent].noteList
-				// } else {
-				// 	this.categoryList = []
-				// 	this.noteList = []
-				// }
-			},
+			// getCachedList (parent = 0) {
+			// 	// let data = this.getCachedData()
+			// 	// if (data[parent]) {
+			// 	// 	this.categoryList = data[parent].categoryList
+			// 	// 	this.noteList = data[parent].noteList
+			// 	// } else {
+			// 	// 	this.categoryList = []
+			// 	// 	this.noteList = []
+			// 	// }
+			// },
 			async getCategoryList () {
 				try {
 					let ret = await API.category.list()
