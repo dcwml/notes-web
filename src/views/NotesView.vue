@@ -17,11 +17,6 @@
 					<div class="create-note">
 						<button @click="createNote" class="button-primary">新建笔记</button>
 					</div>
-					<div class="breadcrumb">
-						<span class="breadcrumb-item" v-text="breadcrumb.parent"></span>
-						/
-						<span class="breadcrumb-item" v-text="breadcrumb.current"></span>
-					</div>
 					<CategoryTree :treeData="list"
 						@note-selected="onNoteSelected"
 						@category-selected="onCategorySelected"
@@ -30,13 +25,22 @@
 					></CategoryTree>
 				</div>
 				<div class="middle">
-						<div class="form-item">
-							<input type="text" class="title" v-model="note.title" @input="update" :disabled="loading">
-						</div>
-						<div class="tip" v-text="tip"></div>
-						<div class="form-item editor">
-							<textarea v-model="note.content" @input="update" :disabled="loading"></textarea>
-						</div>
+					<div class="breadcrumb">
+						<template v-for="item in breadcrumb" :key="item.id">
+							<!-- <font-awesome-icon :icon="['fas', 'angle-right']" /> -->
+							<font-awesome-icon class="breadcrumb-item" :icon="faAngleRight" v-if="item.id > 0" />
+							<!-- <div class="breadcrumb-item" v-if="item.id > 0">/</div> -->
+							<div class="breadcrumb-item breadcrumb-item-name" v-text="item.name"></div>
+						</template>
+						<!-- <span class="breadcrumb-item" v-text="breadcrumb.parent"></span> -->
+					</div>
+					<div class="form-item">
+						<input type="text" class="title" v-model="note.title" @input="update" :disabled="loading">
+					</div>
+					<div class="tip" v-text="tip"></div>
+					<div class="form-item editor">
+						<textarea v-model="note.content" @input="update" :disabled="loading"></textarea>
+					</div>
 				</div>
 				<div class="right">
 					<div class="content md-preview" v-html="html"></div>
@@ -54,7 +58,7 @@
 	import '../assets/prism.css'
 	import API from '../lib/api.js'
 	import Prism from "prismjs"
-	import { faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile } from "@fortawesome/free-solid-svg-icons";
+	import { faAngleRight } from "@fortawesome/free-solid-svg-icons";
 	import { verify } from '../lib/verify.js'
 	import CategoryTree from '../components/CategoryTree.vue'
 
@@ -65,12 +69,9 @@
 			return {
 				ready: false,
 				loading: false,
-				faCaretRight, faCaretDown, faFolderClosed, faFolderOpen, faFile,
+				faAngleRight,
 				category: 0,
-				breadcrumb: {
-					current: '',
-					parent: '',
-				},
+				breadcrumb: [ { name: '根', id: 0 } ],
 				allData: [],
 				list: [],
 				categoryList: [],
@@ -160,7 +161,7 @@
 				let nameVerifyResult = await verify(name, [
 					{ required: true, message: '请输入分类名' },
 					{ minLen: 1, message: '分类名不能少于1个字符' },
-					{ maxLen: 32, message: '分类名不能超过32个字符' },
+					{ maxLen: 64, message: '分类名不能超过64个字符' },
 				])
 				if (nameVerifyResult) {
 					alert(nameVerifyResult.message)
@@ -242,7 +243,7 @@
 					})
 				}
 				set(this.list)
-				// this.updateBreadcrumb()
+				// this.updateBreadcrumb('category')
 			},
 			async onNoteSelected (item) {
 				let noteId = item.modelId
@@ -271,6 +272,17 @@
 					alert(err.message)
 				}
 				this.loading = false
+				this.updateBreadcrumb('note')
+			},
+
+			onBreadcrumbClick (breadcrumbItem) {
+				// 暂时没啥用，以后再说吧。
+				this.category = breadcrumbItem.id
+				let listItem = this.list.find(e => e.type === 'category' && e.modelId === this.category)
+				if (listItem) {
+					this.onCategorySelected(listItem)
+				}
+				this.updateBreadcrumb('category')
 			},
 
 			update (autoSave = true) {
@@ -363,20 +375,29 @@
 
 				return getChildren(0)
 			},
-			updateBreadcrumb () {
-				this.breadcrumb.current = ''
-				this.breadcrumb.parent = ''
-				if (this.category) {
-					let current = this.allData.find(item => item.name && item.id === this.category)
-					if (current) {
-						this.breadcrumb.current = current.name
-
-						let parent = this.allData.find(item => item.name && item.id === current.parent_id)
-						if (parent) {
-							this.breadcrumb.parent = parent.name
-						}
+			updateBreadcrumb (by) {
+				this.breadcrumb = []
+				let findOne = id => {
+					let cat = this.allData.find(item => item.name && item.id === id)
+					if (!cat) {
+						return
+					}
+					this.breadcrumb.unshift({ id: cat.id, name: cat.name })
+					if (cat.parent_id) {
+						findOne(cat.parent_id)
+					}
+					let item = this.list.find(item => item.type === 'category' && item.modelId === cat.id)
+					if (!item) return
+					item.expand = true
+				}
+				if (by === 'category') findOne(this.category)
+				else if (by === 'note') {
+					let note = this.allData.find(item => item.title && item.id === this.note.id)
+					if (note) {
+						findOne(note.category_id)
 					}
 				}
+				this.breadcrumb.unshift({ name: '根', id: 0 })
 			},
 		},
 	}
@@ -452,7 +473,19 @@
 		}
 
 		.breadcrumb {
+			display: flex;
+			flex-wrap: wrap;
 			text-align: center;
+			padding-bottom: 10px;
+		}
+		.breadcrumb-item {
+			padding-right: 10px;
+			padding-bottom: 5px;
+
+			&-name {
+				color: var(--color-primary);
+				// cursor: pointer;
+			}
 		}
 
 		.editor {

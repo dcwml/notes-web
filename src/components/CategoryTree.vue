@@ -44,6 +44,7 @@
 				@note-selected="onNoteSelected"
 				@category-selected="onCategorySelected"
 				@create-category="onCreateCategory"
+				@rename-category="onRenameCategory"
 			></CategoryTree>
 		</li>
 	</ul>
