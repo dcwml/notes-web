@@ -6,21 +6,12 @@
 			<div class="wrap">
 				<div class="left">
 					<div class="create-category">
-						<div class="title">新建分类</div>
+						<div class="title">新建一级分类</div>
 						<div class="form-item">
-							选择分类:
-							<select name="" id="" v-model="createCategoryForm.parent">
-								<option value="0">（无）</option>
-								<option v-for="item of categoryOptions" v-bind:key="item.value" :value="item.value" v-html="item.label"></option>
-							</select>
-						</div>
-						<div class="form-item">
-							新建子分类或者修改名称：
 							<input type="text" placeholder="请输入分类名" v-model="createCategoryForm.name">
 						</div>
 						<div>
 							<button @click="createCategory">新建分类</button>
-							<button @click="renameCategory">重命名</button>
 						</div>
 					</div>
 					<div class="create-note">
@@ -31,7 +22,12 @@
 						/
 						<span class="breadcrumb-item" v-text="breadcrumb.current"></span>
 					</div>
-					<CategoryTree :treeData="list" @note-selected="onNoteSelected" @category-selected="onCategorySelected"></CategoryTree>
+					<CategoryTree :treeData="list"
+						@note-selected="onNoteSelected"
+						@category-selected="onCategorySelected"
+						@create-category="onCreateCategory"
+						@rename-category="onRenameCategory"
+					></CategoryTree>
 				</div>
 				<div class="middle">
 						<div class="form-item">
@@ -155,41 +151,45 @@
 				return await API.note.get(id)
 			},
 
-			itemClass (item) {
-				let cls = 'item'
-				if (item.type === 'category' && item.modelId === this.category) {
-					cls += ' selected'
-				} else if (item.type === 'note' && item.modelId === this.note.id) {
-					cls += ' selected'
-				}
-
-				if (item.type === 'category' && item.expand) {
-					cls += ' open'
-				}
-				return cls
-			},
-
 			// ================================ event handlers ================================
 
-			async createCategory () {
+			async createCategory (pointerEvent) {
+				if (pointerEvent) this.createCategoryForm.parent = 0
 				let parent = this.createCategoryForm.parent
 				let name = this.createCategoryForm.name
 				let nameVerifyResult = await verify(name, [
 					{ required: true, message: '请输入分类名' },
 					{ minLen: 1, message: '分类名不能少于1个字符' },
-					{ maxLen: 16, message: '分类名不能超过16个字符' },
+					{ maxLen: 32, message: '分类名不能超过32个字符' },
 				])
 				if (nameVerifyResult) {
 					alert(nameVerifyResult.message)
 					return
 				}
 				try {
+					this.loading = true
 					await API.category.create(parent, name)
+					this.loading = false
 					await this.getCategoryList()
 					await this.getList()
 				} catch (err) {
 					alert(err.message)
 				}
+				this.loading = false
+			},
+
+			onCreateCategory (formData) {
+				this.createCategoryForm.parent = formData.parent
+				this.createCategoryForm.name = formData.name
+				this.createCategory()
+				this.createCategoryForm.name = ''
+			},
+
+			onRenameCategory (formData) {
+				this.createCategoryForm.parent = formData.id
+				this.createCategoryForm.name = formData.name
+				this.renameCategory()
+				this.createCategoryForm.name = ''
 			},
 
 			async renameCategory () {
@@ -202,19 +202,22 @@
 				let nameVerifyResult = await verify(name, [
 					{ required: true, message: '请输入分类名1' },
 					{ minLen: 1, message: '分类名不能少于1个字符' },
-					{ maxLen: 16, message: '分类名不能超过16个字符' },
+					{ maxLen: 64, message: '分类名不能超过64个字符' },
 				])
 				if (nameVerifyResult) {
 					alert(nameVerifyResult.message)
 					return
 				}
 				try {
+					this.loading = true
 					await API.category.rename(id, name)
+					this.loading = false
 					await this.getCategoryList()
 					await this.getList()
 				} catch (ex) {
 					alert(ex.message)
 				}
+				this.loading = false
 			},
 
 			async createNote () {
@@ -268,43 +271,6 @@
 					alert(err.message)
 				}
 				this.loading = false
-			},
-
-			async onItemClicked () {
-				// event.stopPropagation()
-				// if (item.type === 'category') {
-				// 	this.category = item.modelId
-				// 	item.expand = !item.expand
-				// 	if (!item.expand) {
-				// 		let model = this.allData.find(model => model.id === item.modelId)
-				// 		if (model) {
-				// 			let parent = this.allData.find(parentModel => parentModel.id === model.parent_id)
-				// 			if (parent) {
-				// 				this.category = parent.id
-				// 			} else {
-				// 				this.category = 0
-				// 			}
-				// 		} else {
-				// 			this.category = 0
-				// 		}
-				// 	}
-				// } else {
-				// 	let noteId = item.modelId
-				// 	this.loading = true
-				// 	try {
-				// 		let note = await this.getNote(noteId)
-				// 		this.note = note
-				// 		this.update(false)
-				// 		document.querySelector('textarea').focus()
-				// 		this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
-				// 		this.lastTitle = note.title
-				// 		this.category = this.note.category_id
-				// 	} catch (err) {
-				// 		alert(err.message)
-				// 	}
-				// 	this.loading = false
-				// }
-				// this.updateBreadcrumb()
 			},
 
 			update (autoSave = true) {
@@ -431,6 +397,7 @@
 			right: 0;
 			bottom: 0;
 			background-color: rgba(255, 255, 255, 0.5);
+			z-index: 10;
 		}
 
 		.wrap {
@@ -488,44 +455,6 @@
 			text-align: center;
 		}
 
-		.list {
-			padding: 10px;
-		}
-
-		.list-2 {
-			padding-left: 20px;
-		}
-		.list-3 {
-			padding-left: 20px;
-		}
-
-		.item {
-			cursor: pointer;
-			padding-top: 5px;
-			padding-bottom: 5px;
-
-			&:hover {
-				background-color: #f8f8f8;
-				color: var(--color-primary);
-			}
-
-			&.selected > .label {
-				color: var(--color-primary);
-			}
-
-			&.selected > svg {
-				color: var(--color-primary);
-			}
-
-			svg {
-				width: 24px;
-			}
-
-			.label {
-				display: inline-block;
-			}
-		}
-
 		.editor {
 			flex: 1;
 		}
@@ -547,13 +476,6 @@
 			padding: 0 0 8px 0;
 			color: #999;
 			font-size: 12px;
-		}
-
-		.fa-folder-open, .fa-folder-closed {
-			color: #cc9;
-		}
-		.fa-file {
-			color: #c9c;
 		}
 	}
 </style>
