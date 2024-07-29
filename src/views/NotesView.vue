@@ -422,27 +422,117 @@
 				let dom = document.querySelector(selector)
 				if (!dom) return
 
-				let generateOneItem = (tag, index) => {}
+				let generateOneItem = (element, level, index) => {
+					let indexAttr = 'h' + level + '_' + index
+					element.setAttribute('data-toc-index', indexAttr)
+					let selector = 'h' + (level + 1)
+					let children = dom.querySelectorAll(selector)
+					let item = {
+						level,
+						tag: 'h' + level,
+						index: indexAttr,
+						element: element,
+						children: [],
+					}
+					for (let i = 0; i < children.length; i++) {
+						let child = children[i]
+						item.children.push(generateOneItem(child, level + 1, i))
+					}
+					return item
+				}
 
 				let generate = function () {
 					let tree = []
 					let h1s = dom.querySelectorAll('h1')
 					for (let i = 0; i < h1s.length; i++) {
 						let h1 = h1s[i]
-						let index = 'h1_' + i
-						h1.setAttribute('data-toc-index', index)
-						tree.push({
-							tag: 'h1',
-							index,
-							element: h1,
-						})
+						// console.log(h1.tagName)
+						let item = generateOneItem(h1, 1, i)
+						tree.push(item)
 					}
-					console.log(tree)
 					return tree
 				}
+
+				let appendChild = (dom, child) => {
+					if (typeof child === 'string') {
+						dom.innerHTML = dom.innerHTML + child
+					} else if (child instanceof HTMLElement) {
+						dom.appendChild(child)
+					} else if (Array.isArray(child)) {
+						for (let i = 0; i < child.length; i++) {
+							appendChild(dom, child[i])
+						}
+					} else {
+						console.log('unknown', child)
+					}
+				}
+				let ce = (tag, attrs, children) => {
+					let element = document.createElement(tag)
+					if (attrs) {
+						for (let key in attrs) {
+							element.setAttribute(key, attrs[key])
+						}
+					}
+					if (children) {
+						for (let i = 0; i < children.length; i++) {
+							appendChild(element, children[i])
+						}
+					}
+					return element
+				}
+				let renderOne = item => {
+					let arr = []
+					// let dom = ce(item.tag, { 'data-toc-index': item.index }, [])
+					let padding = 0
+					for (let i = 1; i < item.level; i++) {
+						padding += 20
+					}
+					let a = ce('a', { 'data-toc-index': item.index, href: 'javascript:void(0);' }, item.element.innerHTML)
+					let div = ce('div', { style: 'padding-left: ' + padding + 'px; padding-bottom: 10px;', class: 'for_' + item.index }, [ a ])
+					a.addEventListener('click', () => {
+						item.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+					})
+					arr.push(div)
+					for (let i = 0; i < item.children.length; i++) {
+						let child = item.children[i]
+						// appendChild(div, renderOne(child))
+						let childArr = renderOne(child)
+						for (let j = 0; j < childArr.length; j++) {
+							arr.push(childArr[j])
+						}
+					}
+					return arr
+				}
+				let render = arr => {
+					let ul = ce('div', {}, [])
+					for (let i = 0; i < arr.length; i++) {
+						let item = arr[i]
+						// ul.appendChild(renderOne(item))
+						appendChild(ul, renderOne(item))
+					}
+					return ul
+				}
+
+				let trees = generate()
+				let nodes = render(trees)
 				// dom.innerHTML = '<p>[TOC]</p>' + toc(tree, { maxDepth: 3 })
 
-				// dom.innerHTML = dom.innerHTML.replace('<p>[TOC]</p>', '<table><tr><th>序号</th><th>标题</th></tr></table>')
+				let findElement = me => {
+					if (me.innerHTML === '[TOC]') {
+						return me
+					}
+					for (let i = 0; i < me.childNodes.length; i++) {
+						let child = me.childNodes[i]
+						let result = findElement(child)
+						if (result) {
+							return result
+						}
+					}
+				}
+
+				let p = findElement(dom)
+				p.innerHTML = ''
+				appendChild(p, nodes)
 			},
 		},
 	}
