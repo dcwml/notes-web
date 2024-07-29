@@ -324,7 +324,7 @@
 					that.html = window.marked.parse(that.note.content)
 					setTimeout(() => {
 						that.updateTOC('.md-preview')
-					}, 300);
+					}, 1);
 					that.parseTimeoutId = 0
 				}, 400)
 			},
