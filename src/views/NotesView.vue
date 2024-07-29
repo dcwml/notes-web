@@ -88,6 +88,7 @@
 				lastTitle: '',
 				html: '',
 				timeoutId: 0,
+				parseTimeoutId: 0,
 				tip: '请从左边选择一个笔记进行编辑',
 			}
 		},
@@ -287,7 +288,7 @@
 
 			update (autoSave = true) {
 				let that = this
-				this.html = window.marked.parse(this.note.content)
+				this.handleParse()
 				setTimeout(() => {
 					Prism.highlightAll()
 				}, 300);
@@ -311,6 +312,21 @@
 					}, 1000)
 					this.tip = '即将自动保存'
 				}
+			},
+
+			handleParse () {
+				let that = this
+				if (that.parseTimeoutId) {
+					clearTimeout(that.parseTimeoutId)
+					that.parseTimeoutId = 0
+				}
+				that.parseTimeoutId = setTimeout(() => {
+					that.html = window.marked.parse(that.note.content)
+					setTimeout(() => {
+						that.updateTOC('.md-preview')
+					}, 300);
+					that.parseTimeoutId = 0
+				}, 400)
 			},
 
 			// ================================ private functions ================================
@@ -399,6 +415,35 @@
 				}
 				this.breadcrumb.unshift({ name: '根', id: 0 })
 			},
+
+			updateTOC (selector) {
+				if (!selector) return
+				if (typeof selector !== 'string') return
+				let dom = document.querySelector(selector)
+				if (!dom) return
+
+				let generateOneItem = (tag, index) => {}
+
+				let generate = function () {
+					let tree = []
+					let h1s = dom.querySelectorAll('h1')
+					for (let i = 0; i < h1s.length; i++) {
+						let h1 = h1s[i]
+						let index = 'h1_' + i
+						h1.setAttribute('data-toc-index', index)
+						tree.push({
+							tag: 'h1',
+							index,
+							element: h1,
+						})
+					}
+					console.log(tree)
+					return tree
+				}
+				// dom.innerHTML = '<p>[TOC]</p>' + toc(tree, { maxDepth: 3 })
+
+				// dom.innerHTML = dom.innerHTML.replace('<p>[TOC]</p>', '<table><tr><th>序号</th><th>标题</th></tr></table>')
+			},
 		},
 	}
 </script>
@@ -427,6 +472,7 @@
 
 		.left {
 			flex: 1;
+			width: 380px; max-width: 380px; min-width: 380px;
 		}
 
 		.middle {
@@ -435,12 +481,14 @@
 			padding: 20px;
 			display: flex;
 			flex-direction: column;
+			width: 500px; max-width: 500px; min-width: 500px;
 		}
 
 		.right {
 			flex: 3;
 			box-sizing: border-box;
 			padding: 20px;
+			width: 1023px; max-width: 1023px; min-width: 1023px;
 		}
 
 		.create-category {

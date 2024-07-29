@@ -93,12 +93,9 @@ input[type=text]
   margin-bottom: 20px;
   color: #333;
 }
-.md-preview code {
-  font-family: 'Courier New', Courier, monospace;
-}
 .md-preview blockquote {
   padding-left: 10px;
-  border-left: 4px solid #ccc;
+  border-left: 4px solid #037aff;
   margin-left: 0;
   margin-bottom: 10px;
 }
@@ -113,11 +110,19 @@ input[type=text]
 }
 
 .md-preview {
+  p {
+    margin-bottom: 10px;
+  }
   ul {
     padding-left: 20px;
+    margin-bottom: 10px;
     li {
-      padding: 8px 0;
+      padding: 5px 0;
       list-style: disc;
+
+      p {
+        margin-bottom: 0;
+      }
 
       ul {
         li {
@@ -131,6 +136,30 @@ input[type=text]
         }
       }
     }
+  }
+  a {
+    color: #037aff;
+    text-decoration: none;
+  }
+
+  code {
+    /* font-family: 'Courier New', Courier, monospace; */
+    font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    font-size: 14px;
+    border: none;
+    vertical-align: middle;
+    white-space: pre-wrap;
+  }
+
+  :not(pre) code {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 2px 4px;
+    /* background-color: #eee; */
+    /* border: 1px solid #ccc; */
+    margin: 0 4px;
+    color: #c7254e;
+    background-color: #f2f2f2;
   }
 }
 
