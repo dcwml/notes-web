@@ -12,6 +12,4 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 
-app
-	.component('font-awesome-icon', FontAwesomeIcon)
-	.mount('#app')
+app.component('font-awesome-icon', FontAwesomeIcon).mount('#app')

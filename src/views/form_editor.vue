@@ -1,10 +1,14 @@
 <template>
-  <div class="p-category" :class="{ ready: ready }"></div>
+  <div class="p-form-editor" :class="{ ready: ready }">
+    <FormEditor></FormEditor>
+  </div>
 </template>
 
 <script>
+import FormEditor from '@/components/FormEditor.vue'
+
 export default {
-  components: {},
+  components: { FormEditor },
   setup() {},
   data() {
     return {
@@ -21,7 +25,7 @@ export default {
 </script>
 
 <style lang="less">
-.p-category {
+.p-form-editor {
   display: none;
 
   &.ready {

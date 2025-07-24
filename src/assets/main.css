@@ -1,6 +1,8 @@
 @import './base.css';
 
-button, input[type=button], input[type=submit] {
+button,
+input[type='button'],
+input[type='submit'] {
   cursor: pointer;
   border: 1px solid var(--color-primary);
   background-color: white;
@@ -29,14 +31,13 @@ button, input[type=button], input[type=submit] {
   }
 }
 
-input[type=text]
-, input[type=password]
-, input[type=number]
-, input[type=tel]
-, input[type=email]
-, textarea
-, select
-{
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input[type='tel'],
+input[type='email'],
+textarea,
+select {
   padding: 8px;
   border: 1px solid var(--color-primary);
   border-radius: 4px;
@@ -104,7 +105,8 @@ input[type=text]
   border-collapse: collapse;
   margin-bottom: 20px;
 }
-.md-preview td, th {
+.md-preview td,
+th {
   padding: 5px;
   border: 1px solid #ccc;
 }
@@ -144,7 +146,7 @@ input[type=text]
 
   code {
     /* font-family: 'Courier New', Courier, monospace; */
-    font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
     font-size: 14px;
     border: none;
     vertical-align: middle;

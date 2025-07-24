@@ -1,611 +1,625 @@
 <template>
-	<div class="p-notes" :class="{ ready: ready }">
-		<div class="hd">
-		</div>
-		<div class="bd">
-			<div class="wrap">
-				<div class="left">
-					<div class="create-category">
-						<div class="title">新建一级分类</div>
-						<div class="form-item">
-							<input type="text" placeholder="请输入分类名" v-model="createCategoryForm.name">
-						</div>
-						<div>
-							<button @click="createCategory">新建分类</button>
-						</div>
-					</div>
-					<div class="create-note">
-						<button @click="createNote" class="button-primary">新建笔记</button>
-					</div>
-					<CategoryTree :treeData="list"
-						@note-selected="onNoteSelected"
-						@category-selected="onCategorySelected"
-						@create-category="onCreateCategory"
-						@rename-category="onRenameCategory"
-					></CategoryTree>
-				</div>
-				<div class="middle">
-					<div class="breadcrumb">
-						<template v-for="item in breadcrumb" :key="item.id">
-							<!-- <font-awesome-icon :icon="['fas', 'angle-right']" /> -->
-							<font-awesome-icon class="breadcrumb-item" :icon="faAngleRight" v-if="item.id > 0" />
-							<!-- <div class="breadcrumb-item" v-if="item.id > 0">/</div> -->
-							<div class="breadcrumb-item breadcrumb-item-name" v-text="item.name"></div>
-						</template>
-						<!-- <span class="breadcrumb-item" v-text="breadcrumb.parent"></span> -->
-					</div>
-					<div class="form-item">
-						<input type="text" class="title" v-model="note.title" @input="update" :disabled="loading">
-					</div>
-					<div class="tip" v-text="tip"></div>
-					<div class="form-item editor">
-						<textarea v-model="note.content" @input="update" :disabled="loading"></textarea>
-					</div>
-				</div>
-				<div class="right">
-					<div class="content md-preview" v-html="html"></div>
-				</div>
-			</div>
-		</div>
-		<div class="ft"></div>
+  <div class="p-notes" :class="{ ready: ready }">
+    <!-- 非阻塞式通知 -->
+    <div v-if="notification.show" class="notification" :class="`is-${notification.type}`">
+      {{ notification.message }}
+      <button class="close" @click="notification.show = false">&times;</button>
+    </div>
 
-		<div class="loading" v-show="loading"></div>
-	</div>
+    <div class="bd">
+      <div class="wrap">
+        <div class="left">
+          <div class="create-category">
+            <div class="title">新建一级分类</div>
+            <div class="form-item">
+              <input
+                type="text"
+                placeholder="请输入分类名"
+                v-model="createCategoryForm.name"
+                @keyup.enter="handleCreateRootCategory"
+              />
+            </div>
+            <div>
+              <button @click="handleCreateRootCategory" :disabled="isTreeLoading">新建分类</button>
+            </div>
+          </div>
+          <div class="create-note">
+            <button @click="handleCreateNote" class="button-primary" :disabled="isTreeLoading">
+              新建笔记
+            </button>
+          </div>
+          <CategoryTree
+            v-if="!isTreeLoading"
+            :treeData="transformedList"
+            @note-selected="onNoteSelected"
+            @category-selected="onCategorySelected"
+            @create-category="onCreateCategory"
+            @rename-category="onRenameCategory"
+            @toggle-expand="onToggleExpand"
+            @show-menu="onShowMenu"
+            @hide-menu="onHideMenu"
+          />
+          <div v-if="isTreeLoading" class="loading-placeholder">正在加载目录...</div>
+        </div>
+        <div class="middle">
+          <div class="breadcrumb">
+            <template v-for="(item, index) in breadcrumb" :key="item.id">
+              <font-awesome-icon class="breadcrumb-item" :icon="faAngleRight" v-if="index > 0" />
+              <div class="breadcrumb-item breadcrumb-item-name" v-text="item.name"></div>
+            </template>
+          </div>
+          <div class="form-item">
+            <input
+              type="text"
+              class="title"
+              v-model="note.title"
+              @input="handleNoteUpdate"
+              :disabled="isNoteLoading || !note.id"
+            />
+          </div>
+          <div class="tip" v-text="autoSaveTip"></div>
+          <div class="form-item editor">
+            <textarea
+              ref="editorTextarea"
+              v-model="note.content"
+              @input="handleNoteUpdate"
+              :disabled="isNoteLoading || !note.id"
+            ></textarea>
+          </div>
+        </div>
+        <div class="right">
+          <div ref="previewContainer" class="content md-preview" v-html="parsedMarkdown"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ft"></div>
+  </div>
 </template>
 
-<script>
-	import '../assets/marked.min.js'
-	import '../assets/prism.css'
-	import API from '../lib/api.js'
-	import Prism from "prismjs"
-	import { faAngleRight } from "@fortawesome/free-solid-svg-icons";
-	import { verify } from '../lib/verify.js'
-	import CategoryTree from '../components/CategoryTree.vue'
+<script setup>
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
+import '../assets/marked.min.js'
+import '../assets/prism.css'
+import API from '../lib/api.js'
+import Prism from 'prismjs'
+import { faAngleRight } from '@fortawesome/free-solid-svg-icons'
+import { verify } from '../lib/verify.js'
+import CategoryTree from '../components/CategoryTree.vue'
 
-	export default {
-		components: { CategoryTree },
-		setup () {},
-		data () {
-			return {
-				ready: false,
-				loading: false,
-				faAngleRight,
-				category: 0,
-				breadcrumb: [ { name: '根', id: 0 } ],
-				allData: [],
-				list: [],
-				categoryList: [],
-				// noteList: [],
-				createCategoryForm: {
-					parent: 0,
-					name: '',
-				},
-				note: {
-					id: 0,
-					title: '',
-					content: '',
-				},
-				lastTitle: '',
-				html: '',
-				timeoutId: 0,
-				parseTimeoutId: 0,
-				tip: '请从左边选择一个笔记进行编辑',
-			}
-		},
-		computed: {
+// =========== 响应式状态定义 (Reactive State) ===========
 
-			categoryOptions () {
-				let arr = []
+const ready = ref(false)
+const isTreeLoading = ref(false)
+const isNoteLoading = ref(false)
 
-				let getChildren = (parent_id, level) => {
-					let list = this.categoryList.filter(item => item.parent_id === parent_id)
-					for (let i = 0; i < list.length; i++) {
-						const item = list[i]
-						arr.push({ value: item.id, label: this.getPrefix(level) + item.name })
-						// getChildren(item.id, level + 1)
-					}
-				}
-				getChildren(0, 1)
+// 通知状态
+const notification = reactive({
+  show: false,
+  message: '',
+  type: 'info' // 'info', 'success', 'error'
+})
 
-				return arr
-			}
-		},
-		async mounted () {
-			try {
-				// this.getCachedList()
-				await this.getCategoryList()
-				this.ready = true
-				await this.getList()
-			} catch (ex) {
-				alert(ex.message)
-			}
-		},
-		methods: {
-			// getCachedList (parent = 0) {
-			// 	// let data = this.getCachedData()
-			// 	// if (data[parent]) {
-			// 	// 	this.categoryList = data[parent].categoryList
-			// 	// 	this.noteList = data[parent].noteList
-			// 	// } else {
-			// 	// 	this.categoryList = []
-			// 	// 	this.noteList = []
-			// 	// }
-			// },
-			async getCategoryList () {
-				try {
-					let ret = await API.category.list()
-					// console.log(ret)
-					this.categoryList = ret.list
-				} catch (err) {
-					alert(err.message)
-				}
-			},
-			async getList (parent = 0) {
-				let dat = await API.note.list({ parent })
-				this.allData = dat
-				this.list = this.transformList()
-				// this.$watch(this.allData, parent, dat)
-				// this.categoryList = dat.categoryList
-				// this.noteList = dat.noteList
-			},
+// 数据
+const allData = ref([]) // 扁平化的笔记和分类列表
+const currentCategoryId = ref(0)
+const note = reactive({
+  id: 0,
+  title: '',
+  content: '',
+  category_id: 0
+})
 
-			async getNote (id) {
-				return await API.note.get(id)
-			},
+// UI状态管理
+const expandedCategories = ref(new Set()) // 存储展开的分类ID
+const activeMenuId = ref(null) // 当前显示菜单的项目ID
 
-			// ================================ event handlers ================================
+// 表单
+const createCategoryForm = reactive({
+  parent: 0,
+  name: ''
+})
 
-			async createCategory (pointerEvent) {
-				if (pointerEvent) this.createCategoryForm.parent = 0
-				let parent = this.createCategoryForm.parent
-				let name = this.createCategoryForm.name
-				let nameVerifyResult = await verify(name, [
-					{ required: true, message: '请输入分类名' },
-					{ minLen: 1, message: '分类名不能少于1个字符' },
-					{ maxLen: 64, message: '分类名不能超过64个字符' },
-				])
-				if (nameVerifyResult) {
-					alert(nameVerifyResult.message)
-					return
-				}
-				try {
-					this.loading = true
-					await API.category.create(parent, name)
-					this.loading = false
-					await this.getCategoryList()
-					await this.getList()
-				} catch (err) {
-					alert(err.message)
-				}
-				this.loading = false
-			},
+// UI
+const breadcrumb = ref([{ name: '根', id: 0 }])
+const autoSaveTip = ref('请从左边选择一个笔记进行编辑')
+const editorTextarea = ref(null) // 编辑器DOM引用
+const previewContainer = ref(null) // 预览区DOM引用
 
-			onCreateCategory (formData) {
-				this.createCategoryForm.parent = formData.parent
-				this.createCategoryForm.name = formData.name
-				this.createCategory()
-				this.createCategoryForm.name = ''
-			},
+// 自动保存相关
+let autoSaveTimeoutId = null
+let lastTitle = ''
 
-			onRenameCategory (formData) {
-				this.createCategoryForm.parent = formData.id
-				this.createCategoryForm.name = formData.name
-				this.renameCategory()
-				this.createCategoryForm.name = ''
-			},
+// =========== 计算属性 (Computed Properties) ===========
 
-			async renameCategory () {
-				let id = this.createCategoryForm.parent
-				let name = this.createCategoryForm.name
-				if (!id) {
-					alert('请选择要重命名的分类')
-					return
-				}
-				let nameVerifyResult = await verify(name, [
-					{ required: true, message: '请输入分类名1' },
-					{ minLen: 1, message: '分类名不能少于1个字符' },
-					{ maxLen: 64, message: '分类名不能超过64个字符' },
-				])
-				if (nameVerifyResult) {
-					alert(nameVerifyResult.message)
-					return
-				}
-				try {
-					this.loading = true
-					await API.category.rename(id, name)
-					this.loading = false
-					await this.getCategoryList()
-					await this.getList()
-				} catch (ex) {
-					alert(ex.message)
-				}
-				this.loading = false
-			},
+// 将扁平数据转换为目录树结构
+const transformedList = computed(() => {
+  const getChildren = (parentId) => {
+    const children = []
+    const categories = allData.value.filter((item) => item.name && item.parent_id === parentId)
+    const notes = allData.value.filter((item) => item.title && item.category_id === parentId)
 
-			async createNote () {
-				let categoryId = this.category
-				let note = await API.note.create(categoryId)
-				this.note = note
-				this.update()
-				document.querySelector('textarea').focus()
-				await this.getList(categoryId)
-			},
+    // 自动展开当前分类的父级
+    let expandId = 0
+    const expandCategory = allData.value.find((item) => item.id === currentCategoryId.value)
+    if (expandCategory) {
+      expandId = expandCategory.parent_id
+    }
 
-			onCategorySelected (item) {
-				this.category = item.modelId
-				let set = arr => {
-					arr.forEach(e => {
-						if (e.type === 'category') {
-							e.selected = e.modelId === item.modelId
-						}
-						if (e.children) {
-							set(e.children)
-						}
-					})
-				}
-				set(this.list)
-				// this.updateBreadcrumb('category')
-			},
-			async onNoteSelected (item) {
-				let noteId = item.modelId
-				this.loading = true
-				try {
-					let note = await this.getNote(noteId)
-					this.note = note
-					this.update(false)
-					document.querySelector('textarea').focus()
-					this.tip = '正在编辑 "' + note.title + '" ，所做修改将自动保存。'
-					this.lastTitle = note.title
-					this.category = this.note.category_id
+    for (const cat of categories) {
+      const cLen = allData.value.filter((item) => item.name && item.parent_id === cat.id).length
+      const nLen = allData.value.filter((item) => item.title && item.category_id === cat.id).length
+      
+      // 检查是否应该展开
+      const shouldExpand = expandedCategories.value.has(cat.id) || 
+                          cat.id === expandId
+      
+      children.push({
+        id: 'c_' + cat.id,
+        modelId: cat.id,
+        label: cat.name,
+        type: 'category',
+        cLen,
+        nLen,
+        len: cLen + nLen,
+        children: getChildren(cat.id),
+        expand: shouldExpand,
+        selected: cat.id === currentCategoryId.value,
+        showMenu: activeMenuId.value === 'c_' + cat.id
+      })
+    }
 
-					let set = arr => {
-						arr.forEach(e => {
-							if (e.type === 'note') {
-								e.selected = e.modelId === item.modelId
-							}
-							if (e.children) {
-								set(e.children)
-							}
-						})
-					}
-					set(this.list)
-				} catch (err) {
-					alert(err.message)
-				}
-				this.loading = false
-				this.updateBreadcrumb('note')
-			},
+    for (const n of notes) {
+      children.push({
+        id: 'n_' + n.id,
+        modelId: n.id,
+        label: n.title,
+        type: 'note',
+        len: 0,
+        children: [],
+        expand: false,
+        selected: n.id === note.id,
+        showMenu: activeMenuId.value === 'n_' + n.id
+      })
+    }
+    return children
+  }
+  return getChildren(0)
+})
 
-			onBreadcrumbClick (breadcrumbItem) {
-				// 暂时没啥用，以后再说吧。
-				this.category = breadcrumbItem.id
-				let listItem = this.list.find(e => e.type === 'category' && e.modelId === this.category)
-				if (listItem) {
-					this.onCategorySelected(listItem)
-				}
-				this.updateBreadcrumb('category')
-			},
+// Markdown解析
+const parsedMarkdown = computed(() => {
+  if (window.marked) {
+    return window.marked.parse(note.content || '')
+  }
+  return ''
+})
 
-			update (autoSave = true) {
-				let that = this
-				this.handleParse()
-				setTimeout(() => {
-					Prism.highlightAll()
-				}, 300);
-				if (!autoSave) {
-					return
-				}
-				if (this.timeoutId) {
-					clearTimeout(this.timeoutId)
-					this.timeoutId = 0
-				}
-				if (this.note.id) {
-					this.timeoutId = setTimeout(() => {
-						that.tip = '自动保存中。。。'
-						API.note.update(this.note.id, this.note.title, this.note.content).then((ret) => {
-							that.tip = '自动保存成功(' + ret.update_time + ')'
-							if (that.lastTitle !== that.note.title) that.getList()
-							that.lastTitle = that.note.title
-						}).catch(err => {
-							that.tip = '自动保存失败(' + err.message + ')'
-						})
-					}, 1000)
-					this.tip = '即将自动保存'
-				}
-			},
+// =========== 方法 (Methods) ===========
 
-			handleParse () {
-				let that = this
-				if (that.parseTimeoutId) {
-					clearTimeout(that.parseTimeoutId)
-					that.parseTimeoutId = 0
-				}
-				that.parseTimeoutId = setTimeout(() => {
-					that.html = window.marked.parse(that.note.content)
-					setTimeout(() => {
-						that.updateTOC('.md-preview')
-					}, 1);
-					that.parseTimeoutId = 0
-				}, 400)
-			},
+// --- 通知 ---
+function showNotification(message, type = 'error', duration = 3000) {
+  notification.message = message
+  notification.type = type
+  notification.show = true
+  setTimeout(() => {
+    notification.show = false
+  }, duration)
+}
 
-			// ================================ private functions ================================
+// --- 数据获取与处理 ---
+async function fetchAllData() {
+  isTreeLoading.value = true
+  try {
+    allData.value = await API.note.list({ parent: 0 }) // 假设API返回所有数据
+  } catch (err) {
+    showNotification(err.message || '数据加载失败')
+  } finally {
+    isTreeLoading.value = false
+  }
+}
 
-			getCachedData () {
-				let value = window.localStorage.getItem('note_data')
-				if (!value) return {}
-				return JSON.parse(value)
-			},
-			setDataToCache (parent, data) {
-				let dat = this.getCachedData()
-				dat[parent] = data
-				window.localStorage.setItem('note_data', JSON.stringify(dat))
-			},
-			getPrefix (level) {
-				return '&nbsp;&nbsp;'.repeat(level - 1)
-			},
-			transformList () {
-				let getChildren = (parent_id) => {
-					let arr = []
-					let expandId = 0
-					if (this.category) {
-						let expandCategory = this.allData.find(item => item.id === this.category)
-						if (expandCategory) {
-							expandId = expandCategory.parent_id
-						}
-					}
-					let a = this.allData.filter(item => item.name && item.parent_id === parent_id)
-					let b = this.allData.filter(item => item.title && item.category_id === parent_id)
-					for (let i = 0; i < a.length; i++) {
-						let cLen = this.allData.filter(item => item.name && item.parent_id === a[i].id).length
-						let nLen = this.allData.filter(item => item.title && item.category_id === a[i].id).length
-						arr.push({
-							id: 'c_' + a[i].id,
-							modelId: a[i].id,
-							label: a[i].name, // + ' (' + cLen + ', ' + nLen + ')',
-							type: 'category',
-							cLen,
-							nLen,
-							len: cLen + nLen,
-							children: getChildren(a[i].id),
-							expand: a[i].id === this.category || a[i].id === expandId,
-							selected: a[i].id === this.category,
-						})
-					}
-					for (let i = 0; i < b.length; i++) {
-						arr.push({
-							id: 'n_' + b[i].id,
-							modelId: b[i].id,
-							label: b[i].title,
-							type: 'note',
-							cLen: 0,
-							nLen: 0,
-							len: 0,
-							children: [],
-							expand: false,
-							// selected: a[i].id === this.note.id,
-						})
-					}
-					return arr
-				}
+async function fetchNote(id) {
+  isNoteLoading.value = true
+  try {
+    const fetchedNote = await API.note.get(id)
+    Object.assign(note, fetchedNote)
+    lastTitle = note.title
+    autoSaveTip.value = `正在编辑 "${note.title}" ，所做修改将自动保存。`
+    editorTextarea.value?.focus()
+    updateBreadcrumb('note')
+  } catch (err) {
+    showNotification(err.message || '笔记加载失败')
+  } finally {
+    isNoteLoading.value = false
+  }
+}
 
-				return getChildren(0)
-			},
-			updateBreadcrumb (by) {
-				this.breadcrumb = []
-				let findOne = id => {
-					let cat = this.allData.find(item => item.name && item.id === id)
-					if (!cat) {
-						return
-					}
-					this.breadcrumb.unshift({ id: cat.id, name: cat.name })
-					if (cat.parent_id) {
-						findOne(cat.parent_id)
-					}
-					let item = this.list.find(item => item.type === 'category' && item.modelId === cat.id)
-					if (!item) return
-					item.expand = true
-				}
-				if (by === 'category') findOne(this.category)
-				else if (by === 'note') {
-					let note = this.allData.find(item => item.title && item.id === this.note.id)
-					if (note) {
-						findOne(note.category_id)
-					}
-				}
-				this.breadcrumb.unshift({ name: '根', id: 0 })
-			},
+// --- 分类操作 ---
+async function handleCreateRootCategory() {
+  await createCategory(0, createCategoryForm.name)
+  createCategoryForm.name = ''
+}
 
-			updateTOC (selector) {
-				if (!selector) return
-				if (typeof selector !== 'string') return
-				let dom = document.querySelector(selector)
-				if (!dom) return
+async function onCreateCategory(formData) {
+  await createCategory(formData.parent, formData.name)
+}
 
-				let appendChild = (dom, child) => {
-					if (typeof child === 'string') {
-						dom.innerHTML = dom.innerHTML + child
-					} else if (child instanceof HTMLElement) {
-						dom.appendChild(child)
-					} else if (Array.isArray(child)) {
-						for (let i = 0; i < child.length; i++) {
-							appendChild(dom, child[i])
-						}
-					} else {
-						console.log('unknown', child)
-					}
-				}
-				let ce = (tag, attrs, children) => {
-					let element = document.createElement(tag)
-					if (attrs) {
-						for (let key in attrs) {
-							element.setAttribute(key, attrs[key])
-						}
-					}
-					if (children) {
-						for (let i = 0; i < children.length; i++) {
-							appendChild(element, children[i])
-						}
-					}
-					return element
-				}
-				let renderOne = item => {
-					let level = parseInt(item.tagName.substr(1))
-					let padding = 0
-					for (let i = 1; i < level; i++) {
-						padding += 20
-					}
-					let a = ce('a', { href: 'javascript:void(0);' }, item.innerHTML)
-					a.addEventListener('click', () => {
-						if (item.scrollIntoView)
-							item.scrollIntoView({ behavior: 'smooth', block: 'start' })
-					})
-					let div = ce('div', { style: 'padding-left: ' + padding + 'px; padding-bottom: 10px;' }, [ a ])
-					return div
-				}
-				let render = arr => {
-					let container = ce('div', {}, [])
-					for (let i = 0; i < arr.length; i++) {
-						let heading = arr[i]
-						appendChild(container, renderOne(heading))
-					}
-					return container
-				}
+async function createCategory(parentId, name) {
+  const nameVerifyResult = await verify(name, [
+    { required: true, message: '请输入分类名' },
+    { minLen: 1, message: '分类名不能少于1个字符' },
+    { maxLen: 64, message: '分类名不能超过64个字符' }
+  ])
+  if (nameVerifyResult) {
+    showNotification(nameVerifyResult.message)
+    return
+  }
 
-				let nodes = render(dom.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+  isTreeLoading.value = true
+  try {
+    await API.category.create(parentId, name)
+    await fetchAllData()
+    showNotification('分类创建成功', 'success')
+  } catch (err) {
+    showNotification(err.message || '分类创建失败')
+  } finally {
+    isTreeLoading.value = false
+  }
+}
 
-				let findElement = me => {
-					if (me.innerHTML === '[TOC]') {
-						return me
-					}
-					for (let i = 0; i < me.childNodes.length; i++) {
-						let child = me.childNodes[i]
-						let result = findElement(child)
-						if (result) {
-							return result
-						}
-					}
-				}
+async function onRenameCategory(formData) {
+  const { id, name } = formData
+  const nameVerifyResult = await verify(name, [
+    { required: true, message: '请输入分类名' },
+    { minLen: 1, message: '分类名不能少于1个字符' },
+    { maxLen: 64, message: '分类名不能超过64个字符' }
+  ])
+  if (nameVerifyResult) {
+    showNotification(nameVerifyResult.message)
+    return
+  }
 
-				let p = findElement(dom)
-				if (p) {
-					p.innerHTML = ''
-					appendChild(p, nodes)
-				}
-			},
-		},
-	}
+  isTreeLoading.value = true
+  try {
+    await API.category.rename(id, name)
+    await fetchAllData() // 重命名后需要刷新整个树
+    showNotification('分类重命名成功', 'success')
+  } catch (err) {
+    showNotification(err.message || '分类重命名失败')
+  } finally {
+    isTreeLoading.value = false
+  }
+}
+
+// --- 笔记操作 ---
+async function handleCreateNote() {
+  isTreeLoading.value = true
+  try {
+    const newNote = await API.note.create(currentCategoryId.value)
+    await fetchAllData() // 创建新笔记后刷新树
+    await onNoteSelected({ modelId: newNote.id }) // 选中新笔记
+    showNotification('新笔记已创建', 'success')
+  } catch (err) {
+    showNotification(err.message || '创建笔记失败')
+  } finally {
+    isTreeLoading.value = false
+  }
+}
+
+function handleNoteUpdate() {
+  if (autoSaveTimeoutId) clearTimeout(autoSaveTimeoutId)
+  if (!note.id) return
+
+  autoSaveTip.value = '即将自动保存...'
+  autoSaveTimeoutId = setTimeout(async () => {
+    autoSaveTip.value = '自动保存中...'
+    try {
+      const ret = await API.note.update(note.id, note.title, note.content)
+      autoSaveTip.value = `自动保存成功 (${ret.update_time})`
+
+      // 优化：只在本地更新标题，不重新拉取整个列表
+      if (lastTitle !== note.title) {
+        const noteInList = allData.value.find((item) => item.id === note.id && item.title)
+        if (noteInList) {
+          noteInList.title = note.title
+        }
+        lastTitle = note.title
+      }
+    } catch (err) {
+      autoSaveTip.value = `自动保存失败 (${err.message})`
+    }
+  }, 1000)
+}
+
+// --- UI 事件处理 ---
+function onCategorySelected(item) {
+  currentCategoryId.value = item.modelId
+  // 选中分类时自动展开（如果有子项）
+  if (item.len > 0) {
+    expandedCategories.value.add(item.modelId)
+  }
+  updateBreadcrumb('category')
+}
+
+// 处理分类展开/收起
+function onToggleExpand(item, forceExpand = false) {
+  if (forceExpand) {
+    // 强制展开（用于点击 icon 或 name）
+    expandedCategories.value.add(item.modelId)
+  } else {
+    // 切换展开/收起（用于点击 icon-expand）
+    if (expandedCategories.value.has(item.modelId)) {
+      expandedCategories.value.delete(item.modelId)
+    } else {
+      expandedCategories.value.add(item.modelId)
+    }
+  }
+}
+
+// 处理菜单显示/隐藏
+function onShowMenu(itemId) {
+  activeMenuId.value = itemId
+}
+
+function onHideMenu() {
+  activeMenuId.value = null
+}
+
+async function onNoteSelected(item) {
+  // 重置之前的笔记选中状态
+  const oldNote = allData.value.find((n) => n.id === note.id && n.title)
+  if (oldNote) oldNote.selected = false
+
+  note.id = item.modelId
+  currentCategoryId.value = note.category_id
+
+  // 设置新笔记的选中状态
+  const newNote = allData.value.find((n) => n.id === note.id && n.title)
+  if (newNote) newNote.selected = true
+
+  await fetchNote(item.modelId)
+}
+
+// --- 面包屑和TOC ---
+function updateBreadcrumb(by) {
+  const newBreadcrumb = []
+  let findOne = (id) => {
+    const cat = allData.value.find((item) => item.name && item.id === id)
+    if (!cat) return
+    newBreadcrumb.unshift({ id: cat.id, name: cat.name })
+    if (cat.parent_id) {
+      findOne(cat.parent_id)
+    }
+  }
+
+  if (by === 'category') {
+    findOne(currentCategoryId.value)
+  } else if (by === 'note') {
+    const currentNote = allData.value.find((item) => item.title && item.id === note.id)
+    if (currentNote) {
+      findOne(currentNote.category_id)
+    }
+  }
+  breadcrumb.value = [{ name: '根', id: 0 }, ...newBreadcrumb]
+}
+
+function updateTOC() {
+  const previewEl = previewContainer.value
+  if (!previewEl) return
+
+  const tocPlaceholder = Array.from(previewEl.querySelectorAll('p, div')).find(
+    (el) => el.textContent.trim() === '[TOC]'
+  )
+  if (!tocPlaceholder) return
+
+  const headings = previewEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
+  if (headings.length === 0) {
+    tocPlaceholder.innerHTML = ''
+    return
+  }
+
+  const tocContainer = document.createElement('div')
+  tocContainer.className = 'toc-container'
+
+  headings.forEach((heading) => {
+    const level = parseInt(heading.tagName.substring(1))
+    const anchor = document.createElement('a')
+    anchor.textContent = heading.textContent
+    anchor.href = 'javascript:void(0);'
+    anchor.style.paddingLeft = `${(level - 1) * 20}px`
+    anchor.onclick = () => {
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    tocContainer.appendChild(anchor)
+  })
+
+  tocPlaceholder.innerHTML = ''
+  tocPlaceholder.appendChild(tocContainer)
+}
+
+// =========== 生命周期钩子 (Lifecycle Hooks) ===========
+
+onMounted(async () => {
+  await fetchAllData()
+  ready.value = true
+})
+
+// 监听Markdown变化，更新代码高亮和TOC
+watch(parsedMarkdown, async () => {
+  await nextTick()
+  Prism.highlightAll()
+  updateTOC()
+})
 </script>
 
 <style lang="less" scoped>
-	.p-notes {
-		display: none;
+.p-notes {
+  display: none;
 
-		&.ready {
-			display: block;
-		}
+  &.ready {
+    display: block;
+  }
 
-		.loading {
-			position: fixed;
-			left: 0;
-			top: 0;
-			right: 0;
-			bottom: 0;
-			background-color: rgba(255, 255, 255, 0.5);
-			z-index: 10;
-		}
+  .wrap {
+    display: flex;
+    height: calc(100vh - 50px); // 假设有一些头部高度
+  }
 
-		.wrap {
-			display: flex;
-		}
+  .left {
+    flex: 0 0 380px;
+    border-right: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
 
-		.left {
-			flex: 1;
-			width: 380px; max-width: 380px; min-width: 380px;
-		}
+  .middle {
+    flex: 0 0 500px;
+    box-sizing: border-box;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #eee;
+  }
 
-		.middle {
-			flex: 2;
-			box-sizing: border-box;
-			padding: 20px;
-			display: flex;
-			flex-direction: column;
-			width: 500px; max-width: 500px; min-width: 500px;
-		}
+  .right {
+    flex: 1;
+    box-sizing: border-box;
+    padding: 20px;
+    overflow-y: auto;
+  }
 
-		.right {
-			flex: 3;
-			box-sizing: border-box;
-			padding: 20px;
-			width: 1023px; max-width: 1023px; min-width: 1023px;
-		}
+  .create-category {
+    background-color: #f0f8ff;
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    margin: 10px;
+    border-radius: 4px;
 
-		.create-category {
-			background-color: #9cf;
-			border: 1px solid #037aff;
-			padding: 10px;
+    .title {
+      font-weight: bold;
+      padding-bottom: 10px;
+      border-bottom: #e0e0e0 1px solid;
+    }
 
-			.title {
-				font-weight: bold;
-				padding: 0 0 10px 0;
-				border-bottom: #037aff 1px solid;
-			}
+    .form-item {
+      padding: 10px 0;
+    }
 
-			.form-item {
-				padding: 10px 0;
-			}
+    input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
 
-			input {
-				width: 100%;
-				box-sizing: border-box;
-			}
-		}
+  .create-note {
+    padding: 0 10px 10px 10px;
+    button {
+      width: 100%;
+    }
+  }
 
-		.create-note {
-			padding: 10px;
+  .breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    align-items: center;
+  }
+  .breadcrumb-item {
+    padding-right: 8px;
+    color: #999;
 
-			button {
-				width: 100%;
-			}
-		}
+    &-name {
+      color: var(--color-primary);
+    }
+  }
 
-		.breadcrumb {
-			display: flex;
-			flex-wrap: wrap;
-			text-align: center;
-			padding-bottom: 10px;
-		}
-		.breadcrumb-item {
-			padding-right: 10px;
-			padding-bottom: 5px;
+  .editor {
+    flex: 1;
+    display: flex;
+  }
 
-			&-name {
-				color: var(--color-primary);
-				// cursor: pointer;
-			}
-		}
+  input.title {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 1.2em;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
 
-		.editor {
-			flex: 1;
-		}
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: monospace;
+  }
 
-		input.title {
-			width: 100%;
-			box-sizing: border-box;
-		}
+  .tip {
+    height: 12px;
+    box-sizing: content-box;
+    padding: 8px 0;
+    color: #999;
+    font-size: 12px;
+  }
 
-		textarea {
-			box-sizing: border-box;
-			width: 100%;
-			height: 100%;
-		}
+  .loading-placeholder {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+  }
 
-		.tip {
-			height: 12px;
-			box-sizing: content-box;
-			padding: 0 0 8px 0;
-			color: #999;
-			font-size: 12px;
-		}
-	}
+  .notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: #fff;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+
+    &.is-success {
+      background-color: #4caf50;
+    }
+    &.is-error {
+      background-color: #f44336;
+    }
+    &.is-info {
+      background-color: #2196f3;
+    }
+
+    .close {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      margin-left: 15px;
+      cursor: pointer;
+    }
+  }
+}
+</style>
+<style lang="less">
+// TOC的全局样式，因为它是动态插入的
+.toc-container {
+  border: 1px solid #eee;
+  background-color: #f9f9f9;
+  padding: 10px;
+  border-radius: 4px;
+  a {
+    display: block;
+    text-decoration: none;
+    color: #333;
+    padding: 4px 0;
+    &:hover {
+      color: var(--color-primary);
+    }
+  }
+}
 </style>
