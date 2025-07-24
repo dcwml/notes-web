@@ -140,7 +140,7 @@ const transformedList = computed(() => {
 
     // 自动展开当前分类的父级
     let expandId = 0
-    const expandCategory = allData.value.find((item) => item.id === currentCategoryId.value)
+    const expandCategory = allData.value.find((item) => item.name && item.id === currentCategoryId.value)
     if (expandCategory) {
       expandId = expandCategory.parent_id
     }
@@ -333,12 +333,19 @@ function handleNoteUpdate() {
 
 // --- UI 事件处理 ---
 function onCategorySelected(item) {
+  // 强制触发响应式更新
   currentCategoryId.value = item.modelId
+  
   // 选中分类时自动展开（如果有子项）
   if (item.len > 0) {
     expandedCategories.value.add(item.modelId)
   }
   updateBreadcrumb('category')
+  
+  // 强制刷新计算属性
+  nextTick(() => {
+    console.log('Category selected:', item.label, 'id:', item.modelId)
+  })
 }
 
 // 处理分类展开/收起
@@ -366,18 +373,14 @@ function onHideMenu() {
 }
 
 async function onNoteSelected(item) {
-  // 重置之前的笔记选中状态
-  const oldNote = allData.value.find((n) => n.id === note.id && n.title)
-  if (oldNote) oldNote.selected = false
-
   note.id = item.modelId
-  currentCategoryId.value = note.category_id
-
-  // 设置新笔记的选中状态
-  const newNote = allData.value.find((n) => n.id === note.id && n.title)
-  if (newNote) newNote.selected = true
-
   await fetchNote(item.modelId)
+  
+  // 获取笔记的分类ID并更新当前分类
+  const selectedNote = allData.value.find((n) => n.id === item.modelId && n.title)
+  if (selectedNote) {
+    currentCategoryId.value = selectedNote.category_id
+  }
 }
 
 // --- 面包屑和TOC ---

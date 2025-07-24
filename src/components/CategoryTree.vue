@@ -119,6 +119,9 @@ const toggleExpand = (item) => {
 }
 
 const onItemClicked = (event, item) => {
+  // 阻止事件冒泡
+  event.stopPropagation()
+  
   if (item.type === 'category') {
     // 点击分类时，如果未展开则展开（但不收起）
     if (!item.expand && item.len > 0) {
