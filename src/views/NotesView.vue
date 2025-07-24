@@ -296,6 +296,10 @@ async function handleCreateNote() {
   isTreeLoading.value = true
   try {
     const newNote = await API.note.create(currentCategoryId.value)
+    // 展开新笔记所在的分类
+    if (currentCategoryId.value > 0) {
+      expandedCategories.value.add(currentCategoryId.value)
+    }
     await fetchAllData() // 创建新笔记后刷新树
     await onNoteSelected({ modelId: newNote.id }) // 选中新笔记
     showNotification('新笔记已创建', 'success')
